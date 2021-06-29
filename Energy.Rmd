@@ -1,0 +1,916 @@
+---
+title: "Cosa stiamo facendo per salvare il nostro pianeta?"
+author: "Davide De Cicco"
+output:
+ slidy_presentation:
+    css: ./style.css
+    incremental: yes
+    widescreen: true
+    fig_width: 7
+    fig_height: 6
+    
+runtime: shiny
+
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE,cache = FALSE}
+knitr::opts_chunk$set(cache = TRUE, message = FALSE, warning = FALSE)
+
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(readr)
+# library(sf)
+library(repr) #Scalare grafici
+# library(tmap)# for static and interactive maps
+# library(leaflet) # for interactive maps
+# library(raster)
+# library(spData)
+# library(rnaturalearth)
+# library(rnaturalearthdata)
+library(wesanderson) #Palette
+library(viridis)
+library(scales)
+library(extrafont) #font
+library(stringr)
+library(ggrepel) #Etichette
+library(shiny)
+library(shinythemes)
+library(bslib) #Bootstrap
+library(RColorBrewer)  #Palette
+thematic::thematic_shiny(font = "auto")
+# see what fonts are now available
+
+theme_set(theme_bw())
+
+
+```
+
+## Introduzione
+
+
+Negli ultimi anni sempre più analisi scientifiche hanno evidenziato il problema del **surriscaldamento globale** e dell'**inquinamento** del pianeta su cui viviamo.
+
+> Qual è la situazione di partenza?
+
+
+> Come le grandi potenze economiche mondiali si stanno occupando di questo problema? 
+
+
+
+
+## Analisi situazione attuale
+
+Per analizzare la situazione attuale, ritengo necessario osservare:
+
+- le quantità di *risorse non rinnovabili* disponibili e utilizzate ad oggi;
+
+- gli aumenti di temperatura e di inquinamento nel tempo;
+
+- l'energia prodotta da *fonti rinnovabili* nel mondo;
+
+<!-- - PER RIASSUMERE: QUANTA ENERGIA IN % è GENERATA DA fonti energetiche a basse emissioni di carbonio -->
+
+ 
+ 
+ 
+ 
+ 
+## Risorse non rinnovabili disponibili e utilizzate
+Questo grafico confronta tutte le _risorse non rinnovabili ancora disponibili_ sulla terra con le _risorse utilizzate_ nel solo 2019 (dati più recenti trovati).
+
+```{r, cache = FALSE,include=FALSE}
+CoalRes = read_csv("./OurWorldInData/RiserveDiCarburantiFossili/coal-proved-reserves1.csv")
+CoalRes
+GasRes = read_csv("./OurWorldInData/RiserveDiCarburantiFossili/natural-gas-proved-reserves1.csv")
+GasRes
+OilRes = read_csv("./OurWorldInData/RiserveDiCarburantiFossili/oil-proved-reserves1.csv")
+OilRes
+
+FFUsage = read_csv("./OurWorldInData/RisorseNonRinnUsate/fossil-fuel-production1.csv")
+
+FFUsage <- FFUsage %>% 
+  filter(Year == 2019)    %>% 
+  tidyr::replace_na(list(Entity=0,Code=0,Year=0,CoalReserves=0,GasReserves=0,OilReserves=0))  %>% 
+  filter(Code == 0 | Code == "OWID_WRL") %>% 
+  mutate(CoalProdTon = CoalProduction / 0.000006) %>% #Converto da TW/h a T  (6*10^-6 TW/h = 1T Carbone) (http://extraconversion.com/energy-conversion-table/tonnes-of-coal-equivalent-to-kilowatt-hours.html)
+  
+  mutate(OilProdTon = OilProduction / 0.0000116) %>% #Converto da TW/h a T  (1.16*10^-5 TW/h = 1T Petrolio) (http://www.kylesconverter.com/energy,-work,-and-heat/tons-of-oil-equivalent-to-kilowatt--hours)
+  
+  mutate(GasProdTon = GasProduction / 0.0000145) %>% #Converto da TW/h a T  (1.445*10^-5 = 1T Gas Naturale Liquefatto) (https://www.unitjuggler.com/convert-energy-from-kWh-to-MtLNG.html?val=39893382222962.69531)
+  
+  dplyr::select(-Code, -Year, -CoalProduction, -OilProduction, -GasProduction)  %>%
+  mutate(TotProd = CoalProdTon + OilProdTon + GasProdTon) #Consumi totali
+ 
+
+# tail(FFUsage, n=10)
+
+
+CGRes = left_join(CoalRes, GasRes, by=c("Code", "Entity","Year"), copy = FALSE)
+CGORes = left_join(CGRes, OilRes, by=c("Code", "Entity","Year"), copy = FALSE)
+CGORes <- CGORes %>% 
+  tidyr::replace_na(list(Entity=0,Code=0,Year=0,CoalReserves=0,GasReserves=0,OilReserves=0))  %>% 
+  mutate(GasReservesTon = GasReserves*0.00073) %>%# Converto da metri cubi a tonnellate (GNL) (https://qp.com.qa/en/Pages/ConversionFactor.aspx)
+  mutate(TotReserves = GasReservesTon + CoalReserves + OilReserves) %>% #Risorse totali
+  filter(TotReserves > 1e+11) %>% 
+  filter(Code == 0 | Code == "OWID_WRL")  %>% #Filtro i continenti
+  dplyr::select(-Code, -Year, -GasReserves) %>%
+  arrange(TotReserves)
+
+# tail(CGORes, n=10)
+
+FFReservesUsage = left_join(CGORes, FFUsage, by=c("Entity"), copy = FALSE)
+#Tabella per calcolare RP
+FFReservesUsageRP <- FFReservesUsage %>% 
+  mutate(RPCoal = CoalReserves / CoalProdTon) %>% 
+  mutate(RPOil = OilReserves / OilProdTon) %>% 
+  mutate(RPGas = GasReservesTon / GasProdTon) 
+
+# tail(FFReservesUsage, n=10)
+# tail(FFReservesUsageRP, n=10)
+
+
+
+# suddivisione originale
+# #Tabella per BoxPlot
+# FFReservesUsageBarPlot <- FFReservesUsage %>%
+#   dplyr::select(-TotReserves, -TotProd) %>%
+#   
+#   # Rinomino colonne per leggibilità
+#   rename(
+#     Riserve_Carbone = CoalReserves,
+#     Riserve_Oli = OilReserves,
+#     Riserve_Gas_Naturali_Liquefatto = GasReservesTon,
+#     Carbone_Utilizzato = CoalProdTon,
+#     Gas_Naturale_Liquefatto_Utilizzato = GasProdTon,
+#     Oli_Utilizzati = OilProdTon,
+#     ) %>%
+#   pivot_longer(FFReservesUsage, cols=2:7, names_to = "Tipo_di_CF", values_to = "Quantità") %>%
+#   mutate(ResUse = ifelse(str_detect(Tipo_di_CF,"Riserve"), "Tutte_le_Riserve_Disponibili_ad_ora", "Risorse_stuilizzate_solamnente_nel_2019")) %>%#creo colonna che divide in Risorse e Utilizzi
+#  mutate(QuantitàLog = log10(Quantità))
+
+
+#Tabella per BoxPlot
+#Divido per il totale di risorse disponibili nel mondo
+FFReservesUsageBarPlot1 <- FFReservesUsage %>%
+  mutate(CoalReserves = CoalReserves / 6.438093e+12) %>%
+  mutate(OilReserves = OilReserves / 6.438093e+12)  %>%
+  mutate(GasReservesTon = GasReservesTon / 6.438093e+12)  %>%
+  mutate(CoalProdTon = CoalProdTon / 6.438093e+12) %>%
+  mutate(OilProdTon = OilProdTon / 6.438093e+12)  %>%
+  mutate(GasProdTon = GasProdTon / 6.438093e+12)  %>%
+  dplyr::select(-TotReserves, -TotProd) %>%
+  pivot_longer(FFReservesUsage, cols=2:7, names_to = "Tipo_di_CF", values_to = "Percentuali")
+
+FFReservesUsageBarPlot2 <- FFReservesUsage  %>%
+  pivot_longer(FFReservesUsage, cols=2:9, names_to = "Tipo_di_CF", values_to = "Quantità")
+#Unisco le tabelle precedenti e creo la colonna Reserves or Utilized
+ciao = right_join(FFReservesUsageBarPlot2, FFReservesUsageBarPlot1, by=c("Tipo_di_CF", "Entity"), copy = FALSE)
+ciao <- ciao %>%
+mutate(ResUse = ifelse(str_detect(Tipo_di_CF,"Reserves"), "Tutte le Riserve Disponibili ad ora", "Risorse utilizzate nel solo 2019"))
+# Rinomino le colonne per maggiore leggibilità nel grafico
+ciao$Tipo_di_CF[ciao$Tipo_di_CF == "CoalProdTon"] <- "Carbone utilizzato"
+ciao$Tipo_di_CF[ciao$Tipo_di_CF == "CoalReserves"] <- "Riserve Carbone"
+ciao$Tipo_di_CF[ciao$Tipo_di_CF == "GasProdTon"] <- "Gas (GNL) utilizzato"
+ciao$Tipo_di_CF[ciao$Tipo_di_CF == "GasReservesTon"] <- "Riserve Gas (GNL)"
+ciao$Tipo_di_CF[ciao$Tipo_di_CF == "OilProdTon"] <- "Petrolio utilizzato"
+ciao$Tipo_di_CF[ciao$Tipo_di_CF == "OilReserves"] <- "Riserve Petrolio"
+
+
+  # 
+# ciao <- ciao %>%
+#   mutate(filter(Entity == "Asia Pacific", Tipo_di_CF == "Carbone utilizzato" | Tipo_di_CF == "Gas (GNL) utilizzato" | Tipo_di_CF == "Petrolio utilizzato") )
+#          
+#          
+# Grafico BoxPlot
+ConfrontoDispUtilizPerc <- ggplot(data = ciao, aes(x = reorder(Entity, Percentuali), y = Percentuali, fill = Tipo_di_CF)) +
+  geom_bar(position="stack", stat="identity")+
+  theme_dark()+
+  labs(x = "Continenti",
+    y = "Quantità (percentuale)",
+    title  = "Riserve e Utilizzo carbon fossili nel mondo") +
+  theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+    axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+    legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+    legend.key.size = unit(1.5, "cm"),
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "transparent", colour = "transparent"),
+    legend.text = element_text(color='lightgrey', size=18),
+    axis.text.x = element_text(color='lightgrey', size=20, angle = 30, hjust = 1),
+    axis.text.y = element_text(color='lightgrey',angle = 30, vjust = -1),
+    text = element_text(family = "Raleway", size = 24),
+    plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+    plot.caption = element_text(size = 28),
+    axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+    legend.text.align = 0) +
+  scale_x_discrete(
+    breaks=c("Europe", "South & Central America", "North America", "Asia Pacific", "CIS", "Middle East", "World"),
+    labels=c("EU", "Sud e Centro America", "Nord America", "Asia Pacifico", "CSI (Russia)", "Medio Oriente", "Mondo")) +
+  geom_text(aes(y = Percentuali, vjust = -3, label = paste(round(Percentuali*100,digits = 2), "%")), colour="#D53E4F", fontface="bold", size = 6,check_overlap=TRUE) +
+  # geom_label(aes(label=paste(round(Percentuali*100,digits = 2), "%"),vjust = -3,check_overlap=TRUE))+
+  guides(fill = guide_legend(override.aes = aes(color = NA), title="Tipi di\nCarbon Fossili:"))+
+  facet_wrap(~ResUse)
+
+ConfrontoDispUtilizPerc_trasp <- ConfrontoDispUtilizPerc +           # Remove background elements manually
+  theme(legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+        panel.background = element_rect(fill = "transparent"),
+        panel.grid.major = element_blank(),
+        plot.background = element_rect(fill = "transparent", color = NA))+
+  scale_fill_brewer(palette="Spectral")
+
+ggsave(ConfrontoDispUtilizPerc_trasp,            # Save transparent png file
+       filename = "ConfrontoDispUtilizPerc_trasp.png",
+       width = 17, height = 10, dpi = 600,
+       bg = "transparent")
+
+
+
+#Tabella per BoxPlot Logaritmico
+FFReservesUsageTot <- FFReservesUsage %>% 
+  dplyr::select(-c(2,3,4,6,7,8)) %>%
+  # mutate(TotReserves = TotReserves / 6.438093e+12) %>%
+  # mutate(TotProd = TotProd / 6.438093e+12)  %>%
+  pivot_longer(cols=2:3, names_to = "Tipo_di_CF", values_to = "Quantità")%>%
+  mutate(ResUse = ifelse(str_detect(Tipo_di_CF,"Reserves"), "Tutte le Riserve Disponibili ad ora", "Risorse utilizzate nel solo 2019"))
+FFReservesUsageTot$Tipo_di_CF[FFReservesUsageTot$Tipo_di_CF == "TotReserves"] <- "Riserve Totali"
+FFReservesUsageTot$Tipo_di_CF[FFReservesUsageTot$Tipo_di_CF == "TotProd"] <- "Risorse Utilizzate Totali"
+
+ConfrontoDispUtilizPercWW <- ggplot(data = FFReservesUsageTot, aes(x = reorder(Entity, Quantità), y = Quantità, fill = Tipo_di_CF)) +
+  geom_bar(position="stack", stat="identity")+
+  theme_dark()+
+  labs(x = "Continenti",
+    y = "Quantità (tonnellate)",
+    title  = "Riserve e Utilizzo carbon fossili nel mondo (in scala Logaritmica)") +
+  theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+    axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+    legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+    legend.key.size = unit(1.5, "cm"),
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "transparent", colour = "transparent"),
+    legend.text = element_text(color='lightgrey', size=18),
+    axis.text.x = element_text(color='lightgrey', size=20, angle = 30, hjust = 1),
+    axis.text.y = element_text(color='lightgrey',angle = 30, vjust = -1),
+    text = element_text(family = "Raleway", size = 24),
+    plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+    plot.caption = element_text(size = 28),
+    axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+    legend.text.align = 0) +
+   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x), labels = trans_format("log10", math_format(10^.x)))+
+  scale_x_discrete(
+    breaks=c("Europe", "South & Central America", "North America", "Asia Pacific", "CIS", "Middle East", "World"),
+    labels=c("EU", "Sud e Centro America", "Nord America", "Asia Pacifico", "CSI (Russia)", "Medio Oriente", "Mondo"))+
+  geom_text(aes(y = Quantità, vjust = -1, label = paste(round(Quantità/1000000000,digits = 2), "MldT")), colour="#D53E4F", fontface="bold", size = 6,check_overlap=TRUE) +
+  # geom_label(aes(label=paste(round(Quantità/1000000000,digits = 2), "MldT"),vjust = -1,check_overlap=TRUE))+
+  guides(fill = guide_legend(override.aes = aes(color = NA), title="Riserve o Utilizzo:\n(in Miliardi di Tonnellate)"))+
+  facet_wrap(~ResUse)
+
+ConfrontoDispUtilizPercWW_trasp <- ConfrontoDispUtilizPercWW +           # Remove background elements manually
+  theme(legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+        panel.background = element_rect(fill = "transparent"),
+        panel.grid.major = element_blank(),
+        plot.background = element_rect(fill = "transparent", color = NA))+
+  scale_fill_brewer(palette="Spectral")
+
+ggsave(ConfrontoDispUtilizPercWW_trasp,            # Save transparent png file
+       filename = "ConfrontoDispUtilizPercWW_trasp.png",
+       width = 17, height = 10, dpi = 600,
+       bg = "transparent")
+
+
+#Grafico BoxPlot
+# ConfrontoDispUtiliz <- ggplot(data = FFReservesUsageBarPlot, aes(x = reorder(Entity, QuantitàLog), y = QuantitàLog, fill = Tipo_di_CF)) +
+#   geom_bar(position="stack", stat="identity")+
+#   theme_dark()+
+#   labs(x = "Continenti",
+#     y = "Quantità (tonnellate)",
+#     title  = "Riserve e Utilizzo carbon fossili nel mondo") +
+#   theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+#     axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+#     legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+#     legend.key.size = unit(1.5, "cm"),
+#     legend.title.align = 0.5,
+#     legend.key = element_rect(fill = "transparent", colour = "transparent"),
+#     legend.text = element_text(color='lightgrey', size=18),
+#     axis.text.x = element_text(color='lightgrey', size=20, angle = 30, hjust = 1),
+#     axis.text.y = element_text(color='lightgrey',angle = 30, vjust = -1),
+#     text = element_text(family = "Raleway", size = 24),
+#     plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+#     plot.caption = element_text(size = 28),
+#     axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid")) +
+#   facet_wrap(~ResUse)
+# 
+# ConfrontoDispUtiliz_trasp <- ConfrontoDispUtiliz +           # Remove background elements manually
+#   theme(legend.background = element_rect(fill = "transparent"),
+#         legend.box.background = element_rect(fill = "transparent"),
+#         panel.background = element_rect(fill = "transparent"),
+#         panel.grid.major = element_blank(),
+#         plot.background = element_rect(fill = "transparent", color = NA))+
+#   scale_fill_brewer(palette="Spectral") 
+# 
+# ggsave(ConfrontoDispUtiliz_trasp,            # Save transparent png file
+#        filename = "ConfrontoDispUtiliz_trasp.png",
+#        width = 17, height = 9, dpi = 600,
+#        bg = "transparent")
+
+##Grafico iniziale di prova
+# RiserveCGO <- ggplot(data = FFReservesUsage, aes(x = reorder(Entity, Reserves), y = TotReserves, fill = TotReserves)) +
+#      geom_bar(stat="identity") +
+#      theme_dark()+
+#      labs(x = "Continenti",
+#         y = "Riserve (t)",
+#         title  = "Riserve carbon fossili nel mondo") +
+#      theme(axis.title.x = element_text(color="lightgrey", vjust=-0.2),
+#         axis.title.y = element_text(color="lightgrey" , vjust=0.5),
+#         legend.title = element_text(colour="lightgrey", size=16, face="bold"),
+#         legend.text = element_text(color='lightgrey'),
+#         axis.text.x = element_text(angle = 30, hjust = 1),
+#         text = element_text(family = "Raleway", size = 24),
+#         plot.title = element_text(size = 30, colour="lightgrey"),
+#         plot.caption = element_text(size = 28),
+#         axis.line = element_line(colour = "lightgrey", size = 0.5, linetype = "solid")) +
+#      scale_y_continuous(breaks=c(0,2e+11, 1e+12, 3e+12, 6e+12))
+# 
+# 
+# RiserveCGO_trasp <- RiserveCGO +           # Remove background elements manually
+#   theme(legend.background = element_rect(fill = "transparent"),
+#         legend.box.background = element_rect(fill = "transparent"),
+#         panel.background = element_rect(fill = "transparent"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         plot.background = element_rect(fill = "transparent", color = NA))
+# 
+# ggsave(RiserveCGO_trasp,            # Save transparent png file
+#        filename = "p_transp.png",
+#        width = 10, height = 8, dpi = 600,
+#        bg = "transparent")
+```
+![](./ConfrontoDispUtilizPerc_trasp.png)
+![](./ConfrontoDispUtilizPercWW_trasp.png)
+
+
+
+
+<!-- ## Risorse non rinnovabili utilizzate ad oggi -->
+<!-- Qui rappresento le risorse Non rinnovabili utilizzate sulla terra nel 2019. -->
+
+<!-- FARE GRAFICO CON CARTELLA RISORSENONRINNUSATE,  -->
+<!-- I dati forniti sono in TWh, per convertirli in tonnellate usa: -->
+
+<!-- - 6*10^-6 TW/h o 6000 KW/h per ton di __Carbone__ (scientificamente 8000KW/h, ma impianto di produzione elett. meno efficiente) -->
+<!--     (es. WORLD: UsedCoal = 46548 TW/h = 7,76 Miliardi di Tonnellate) -->
+
+<!-- - 1.163*10^-5 TW/h o 11630 KW/h per ton di __Olio__ -->
+<!--     (es. WORLD: UsedOil = 52154 TW/h = 4,485 Miliardi di Tonnellate) -->
+
+<!-- - 1.445*10^-5 TW/h o 14447.205 KW/h per ton di __Gas Naturale Liquefatto__ (GNL) -->
+<!--     (es. WORLD: UsedLNG = 39893 TW/h = 2,761 Miliardi di Tonnellate) -->
+
+```{r, include = FALSE, cache = FALSE}
+FFReservesUsageRP <-FFReservesUsageRP %>%
+  mutate(RPGas = RPGas / 36) #Cambio l'unità di misura da LNG a NG
+
+FFReservesUsageRPGraf <- FFReservesUsageRP %>% 
+  dplyr::select(-c(2,3,4,5,6,7,8,9)) %>%
+  # mutate(TotReserves = TotReserves / 6.438093e+12) %>%
+  # mutate(TotProd = TotProd / 6.438093e+12)  %>%
+  pivot_longer(cols=2:4, names_to = "Tipo_di_CF", values_to = "Durata_in_anni")
+
+FFReservesUsageRPGraf$Tipo_di_CF[FFReservesUsageRPGraf$Tipo_di_CF == "RPCoal"] <- "Carbone"
+FFReservesUsageRPGraf$Tipo_di_CF[FFReservesUsageRPGraf$Tipo_di_CF == "RPGas"] <- "Gas Naturale"
+FFReservesUsageRPGraf$Tipo_di_CF[FFReservesUsageRPGraf$Tipo_di_CF == "RPOil"] <- "Petrolio"
+
+FFReservesUsageRPGrafico <- ggplot(data = FFReservesUsageRPGraf, aes(x = Entity, y = Durata_in_anni, fill = Tipo_di_CF)) +
+     geom_bar(stat="identity", position="dodge") +
+     theme_dark()+
+     labs(x = "Continenti",
+        y = "Durata (anni)",
+        title  = "Anni di riserve restanti con attuali consumi di carbon fossili nel mondo") +
+     theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+    axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+    legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+    legend.key.size = unit(1.5, "cm"),
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "transparent", colour = "transparent"),
+    legend.text = element_text(color='lightgrey', size=18),
+    axis.text.x = element_text(color='lightgrey', size=20, angle = 30, hjust = 1),
+    axis.text.y = element_text(color='lightgrey',angle = 30, vjust = -1),
+    text = element_text(family = "Raleway", size = 24),
+    plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+    plot.caption = element_text(size = 28),
+    axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+    legend.text.align = 0) +
+  scale_x_discrete(
+    breaks=c("Europe", "South & Central America", "North America", "Asia Pacific", "CIS", "Middle East", "World"),
+    labels=c("EU", "Sud e Centro America", "Nord America", "Asia Pacifico", "CSI (Russia)", "Medio Oriente", "Mondo"))+
+geom_text(aes(Entity, vjust = -1, label = round(Durata_in_anni,digits = 0), colour="#D53E4F", fontface="bold", size = 6,check_overlap=TRUE), position = position_dodge(0.90))+
+  guides(colour = FALSE, size = FALSE, fill = guide_legend(override.aes = aes(color = NA), title="Tipo di Carbon Fossile:"))
+
+
+FFReservesUsageRPGrafico_trasp <- FFReservesUsageRPGrafico +           # Remove background elements manually
+  theme(legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+        panel.background = element_rect(fill = "transparent"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "transparent", color = NA))+
+  scale_fill_brewer(palette="Spectral")
+
+ggsave(FFReservesUsageRPGrafico_trasp,            # Save transparent png file
+       filename = "FFReservesUsageRPGrafico_trasp.png",
+       width = 17, height = 10, dpi = 600,
+       bg = "transparent")
+
+TabInquinamento = read_csv("./OurWorldInData/TempeInquin/co2-concentration-long-term1.csv")
+
+TabAnomalieTemp = read_csv("./OurWorldInData/TempeInquin/temperature-anomaly1.csv")
+```
+
+
+## Un importante rapporto: R/P
+
+Il rapporto R/P è la quantità di *riserve accessibili* di carbon fossili divisa per l'attuale utilizzo di esse.
+
+Questo indice è utilizzato sia dalle multinazionali petrolifere sia dagli stati al fine di controllare per quanti anni il loro territorio potrà sopportare quella quantità di produzione e sfruttamento delle risorse.
+
+N.B.: essendo questo un indice basato su valori attuali, non può prevedere future ottimizzazioni dei processi di utilizzo, riutilizzo o estrazione delle materie prime.
+
+![](./FFReservesUsageRPGrafico_trasp.png)
+<!-- Collegarsi alla slide successiva -->
+
+<!-- FARE GRAFICO CON CARTELLE PRECEDENTI,  -->
+<!-- Estrapolare R/P usando i valori convertiti in tonnellate. -->
+
+
+<!--(The R/P ratio essentially divides the quantity of known fuel reserves by the current rate of production to estimate how long we could continue if this level of production remained constant. 
+Again, these figures are only useful as a static measure; they will continue to vary with time as our capacity to economically source and extract fossil fuels changes, and our levels of consumption rise or fall.
+
+a resource will show an increase in production until it reaches a peak, and then production will plateau and enter a declining phase.)
+
+climate change. Carbon dioxide emissions remain trapped in the atmosphere for long periods of time, building up an atmospheric stock that leads temperatures to rise. To keep average global temperature increase below two degrees celsius (as has been agreed in the UN Paris Agreement), we can thus calculate the cumulative amount of carbon dioxide we can emit while maintaining a probability of remaining below this target temperature. This is what we define as a ‘carbon budget’. In the latest Intergovernmental Panel on Climate Change (IPCC) report, the budget for having a 50 percent chance of keeping average warming below two degrees celsius was estimated to be approximately 275 billion tonnes of carbon (as shown in the chart).--> 
+
+
+
+## Aumenti di temperatura e di inquinamento nel tempo
+
+Per comprendere meglio la situazione attuale e futura osserviamo i dati sull'andamento delle temperature e dell'inquinamento.
+Ci serviamo di dati ricavati da analisi scientifiche svolte su ghiacciai permanenti e da osservazioni raccolte nel corso dei secoli.
+
+```{r, echo = FALSE,cache = FALSE}
+thematic::thematic_shiny()
+
+shinyApp(
+  ui = fluidPage(
+    theme = bs_theme(bg = "#2b3e50", fg = "#ebebeb", primary = "#33FFBD",secondary ="#FF3375",
+        base_font = font_google("Raleway"),
+        code_font = font_google("Raleway")
+    ),      
+    titlePanel("Grafici interattivi:"),
+    sidebarLayout(position = "right",
+
+      sidebarPanel(
+        sliderInput("Anni1", 
+                    "Periodo in anni:",
+                    min = -803719,
+                    max = 2018,
+                    value = c(1860, 2018)),
+        sliderInput("Anni2", 
+                    "Periodo in anni:",
+                    min = 1850,
+                    max = 2018,
+                    value = c(1860, 2018))
+      ),
+      
+      mainPanel(
+        plotOutput("TabInquinamentoGraf"),
+        plotOutput("TabAnomalieTempGraf")
+      )
+    )
+  ),
+  server <- function(input, output) {
+    output$TabInquinamentoGraf <- renderPlot({
+      ggplot(TabInquinamento, aes(x = Year, y = CO2_concentrations)) +
+        geom_line(color="#33FFBD") + 
+        xlim(input$Anni1[1], input$Anni1[2]) +
+        labs(x = "Anni",
+        y = "Concentrazione CO2 (ppm)",
+        title  = "Concentrazione CO2 nel tempo") +
+        theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+          axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+          legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+          legend.key.size = unit(1.5, "cm"),
+          legend.title.align = 0.5,
+          legend.key = element_rect(fill = "transparent", colour = "transparent"),
+          legend.text = element_text(color='lightgrey', size=18),
+          axis.text.x = element_text(color='grey', size=16, angle = 30, hjust = 1),
+          axis.text.y = element_text(color='grey',size=16,angle = 30, vjust = -1),
+          text = element_text(family = "Raleway", size = 24),
+          plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+          plot.caption = element_text(size = 28),
+          axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+          legend.background = element_rect(fill = "transparent"),
+          legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+          panel.background = element_rect(fill = "transparent"),
+          panel.grid.minor = element_blank(),
+          plot.background = element_rect(fill = "transparent", color = NA))+
+        guides(colour = FALSE) +
+        xlab("")
+    })
+    
+    output$TabAnomalieTempGraf <- renderPlot({
+      ggplot(TabAnomalieTemp, aes(x=Year, y=MedianT)) +
+        geom_line(color="#33FFBD") + 
+        xlim(input$Anni2[1], input$Anni2[2]) +
+        labs(x = "Anni",
+        y = "Delta temperatura media (°C)",
+        title  = "Differenza di temperatura media negli ultimi secoli") +
+        theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+          axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+          legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+          legend.key.size = unit(1.5, "cm"),
+          legend.title.align = 0.5,
+          legend.key = element_rect(fill = "transparent", colour = "transparent"),
+          legend.text = element_text(color='lightgrey', size=18),
+          axis.text.x = element_text(color='grey', size=16, angle = 30, hjust = 1),
+          axis.text.y = element_text(color='grey',size=16 ,angle = 30, vjust = -1),
+          text = element_text(family = "Raleway", size = 24),
+          plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+          plot.caption = element_text(size = 28),
+          axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+          legend.background = element_rect(fill = "transparent"),
+          legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+          panel.background = element_rect(fill = "transparent"),
+          panel.grid.minor = element_blank(),
+          plot.background = element_rect(fill = "transparent", color = NA))+
+        guides(colour = FALSE) +
+        xlab("")
+    })
+    
+  },
+  
+  options = list(height = 900)
+)
+```
+
+  <!-- qui GRAFICO ANDAMENTO TEMPERATURA -->
+
+
+
+
+## Quali fonti rinnovabili vengono sfruttate oggi e in che quantità?
+
+Rappresentazione dell'utilizzo delle varie fonti rinnovabili per ogni continente.
+<!-- Grafico con 4 fonti rinnovabili principali -->
+```{r, include = FALSE,cache = FALSE}
+RenEnConsumption = read_csv("./OurWorldInData/modern-renewable-energy-consumption1.csv")
+NonRenEnConsumption = read_csv("./OurWorldInData/global-fossil-fuel-consumption1.csv")
+
+# NonRenEnConsumption <- NonRenEnConsumption %>% 
+#   filter(Year == 2019) %>% 
+#   mutate(Energia_Utilizzata = Coal + Oil + Gas) %>% 
+#   dplyr::select(-Code, -Year, -Coal, - Oil, - Gas)
+# 
+# NonRenEnConsumption$Tipo_di_ER <- "Fossile"
+# NonRenEnConsumption <- NonRenEnConsumption[, c(1, 3, 2)]
+
+
+RenEnConsumption <- RenEnConsumption %>% 
+  filter(Year == 2019)    %>% 
+  tidyr::replace_na(list(Entity=0,Code=0,Year=0,WindGeneration=0,SolarGeneration=0,GeoBiomassOther=0,HydroGeneration=0))  %>% 
+  filter(Code == 0 | Code == "OWID_WRL") %>% 
+  filter(HydroGeneration > 100) %>% 
+  dplyr::select(-Code, -Year) 
+
+RenEnConsumptionPivot <- RenEnConsumption %>% 
+  pivot_longer(cols=2:5, names_to = "Tipo_di_ER", values_to = "Energia_Utilizzata")
+
+# NeSRenEnConsumptionPivot = rbind(RenEnConsumptionPivot, NonRenEnConsumption)
+
+RenEnConsumptionPivot$Tipo_di_ER[RenEnConsumptionPivot$Tipo_di_ER == "WindGeneration"] <- "Eolica"
+RenEnConsumptionPivot$Tipo_di_ER[RenEnConsumptionPivot$Tipo_di_ER == "SolarGeneration"] <- "Solare"
+RenEnConsumptionPivot$Tipo_di_ER[RenEnConsumptionPivot$Tipo_di_ER == "GeoBiomassOther"] <- "Geotermica"
+RenEnConsumptionPivot$Tipo_di_ER[RenEnConsumptionPivot$Tipo_di_ER == "HydroGeneration"] <- "Idroelettrica"
+
+
+
+RenEnConsumptionGraf <- ggplot(data = RenEnConsumptionPivot, aes(x = reorder(Entity, Energia_Utilizzata), y = Energia_Utilizzata, fill = Tipo_di_ER)) +
+  geom_bar(position="stack", stat="identity")+
+  theme_dark()+
+  labs(x = "Continenti",
+    y = "Energia Utilizzata (TW/h)",
+    title  = "Utilizzo energia ricavata da Fonti Rinnovabili") +
+  theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+    axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+    legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+    legend.key.size = unit(1.5, "cm"),
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "transparent", colour = "transparent"),
+    legend.text = element_text(color='lightgrey', size=18),
+    axis.text.x = element_text(color='lightgrey', size=20, angle = 30, hjust = 1),
+    axis.text.y = element_text(color='lightgrey',angle = 30, vjust = -1),
+    text = element_text(family = "Raleway", size = 24),
+    plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+    plot.caption = element_text(size = 28),
+    axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+    legend.text.align = 0) +
+  scale_x_discrete(
+    breaks=c("Europe", "South & Central America", "North America", "Asia Pacific", "CIS", "Africa", "World"),
+    labels=c("EU", "Sud e Centro America", "Nord America", "Asia Pacifico", "CSI (Russia)", "Africa", "Mondo"))+
+  # geom_text(aes(y = Quantità, vjust = -1, label = paste(round(Quantità/1000000000,digits = 2), "MldT")), colour="#D53E4F", fontface="bold", size = 6,check_overlap=TRUE) +
+  # geom_label(aes(label=paste(round(Quantità/1000000000,digits = 2), "MldT"),vjust = -1,check_overlap=TRUE))+
+  guides(fill = guide_legend(override.aes = aes(color = NA), title="Tipi di fonti Rinnovabili"))
+
+RenEnConsumptionGraf_trasp <- RenEnConsumptionGraf +           # Remove background elements manually
+  theme(legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+        panel.background = element_rect(fill = "transparent"),
+        panel.grid.major = element_blank(),
+        plot.background = element_rect(fill = "transparent", color = NA))+
+  scale_fill_brewer(palette="Spectral")
+
+ggsave(RenEnConsumptionGraf_trasp,            # Save transparent png file
+       filename = "RenEnConsumptionGraf_trasp.png",
+       width = 17, height = 10, dpi = 600,
+       bg = "transparent")
+
+ConsRN = read_csv("./OurWorldInData/modern-renewable-energy-consumption1.csv")
+ConsNRN = read_csv("./OurWorldInData/global-fossil-fuel-consumption1.csv")
+
+ConsRNWW <- ConsRN %>% 
+  filter(Code == "OWID_WRL")%>% 
+  dplyr::select(-Code, -Entity) 
+
+ConsNRNWW <- ConsNRN %>% 
+  filter(Year > 1960)%>% 
+  dplyr::select(-Code, -Entity) 
+
+ConsNeRNWW = left_join(ConsRNWW, ConsNRNWW, by=c("Year"), copy = FALSE)
+
+ConsNeRNWW <- ConsNeRNWW %>% 
+  pivot_longer(cols=2:8, names_to = "Tipo_di_En", values_to = "TW_h")
+
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "WindGeneration"] <- "Eolica"
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "SolarGeneration"] <- "Solare"
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "GeoBiomassOther"] <- "Geotermica"
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "HydroGeneration"] <- "Idroelettrica"
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "Coal"] <- "Carbone"
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "Oil"] <- "Petrolio"
+ConsNeRNWW$Tipo_di_En[ConsNeRNWW$Tipo_di_En == "Gas"] <- "Gas Naturale"
+
+```
+![](./RenEnConsumptionGraf_trasp.png)
+
+
+## Da quali fonti energetiche siamo più dipendenti?
+
+Analizziamo qual è il rapporto tra le diverse fonti di energia a livello globale oggi e nella storia:
+
+<!-- GRAFICO CON PERCENTUALI DI ENERGIA OTTENUTA DALLE VARIE FONTI  -->
+```{r, echo = FALSE,cache = FALSE}
+thematic::thematic_shiny()
+
+shinyApp(
+  ui = fluidPage(
+    theme = bs_theme(bg = "#2b3e50", fg = "#ebebeb", primary = "#33FFBD",secondary ="#FF3375",
+        base_font = font_google("Raleway"),
+        code_font = font_google("Raleway")
+    ),      
+    titlePanel("Grafici interattivi:"),
+    sidebarLayout(position = "right",
+
+      sidebarPanel(
+        selectInput("fonti", "Fonti:", 
+                  choices = list("Energie rinnovabili", "Energie non rinnovabili", "Tutto"), 
+                  selected = "Tutto"),
+        sliderInput("Anni1", 
+                    "Periodo in anni:",
+                    min = 1965,
+                    max = 2019,
+                    value = c(1965, 2019))
+        ),
+      mainPanel(
+        plotOutput("ConsNeRNWWGraf")
+      )
+    )
+  ),
+  server <- function(input, output) {
+    output$ConsNeRNWWGraf <- renderPlot({
+      
+      if (input$fonti == "Tutto") {
+      datasetGraf = ConsNeRNWW
+    } else if(input$fonti == "Energie rinnovabili"){
+      datasetGraf = filter(ConsNeRNWW,  Tipo_di_En == "Eolica" | Tipo_di_En == "Solare" | Tipo_di_En == "Geotermica" | Tipo_di_En == "Idroelettrica")
+    } else {
+      datasetGraf = filter(ConsNeRNWW,  Tipo_di_En == "Carbone" | Tipo_di_En == "Petrolio" | Tipo_di_En == "Gas Naturale")
+    }
+      data_ends <- datasetGraf %>% 
+        filter(Year == input$Anni1[2]) 
+
+      data_ends$TW_h <- round(data_ends$TW_h)
+      
+      
+      
+      ggplot(datasetGraf, aes(x = Year, y = TW_h, group = Tipo_di_En)) +
+        geom_line(aes(color = Tipo_di_En), size = 1.3) +
+        xlim(input$Anni1[1], input$Anni1[2]) +
+        labs(x = "Anni",
+        y = "Energia Consumata (TW/h)",
+        title  = "Energia consumata e sua derivazione negli ultimi decenni") +
+        theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+          legend.position = "bottom",
+          axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+          legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+          legend.key.size = unit(1.5, "cm"),
+          legend.title.align = 0.5,
+          legend.key = element_rect(fill = "transparent", colour = "transparent"),
+          legend.text = element_text(color='lightgrey', size=18),
+          axis.text.x = element_text(color='grey', size=16, angle = 30, hjust = 1),
+          axis.text.y = element_text(color='grey',size=16,angle = 30, vjust = -1),
+          text = element_text(family = "Raleway", size = 24),
+          plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+          plot.caption = element_text(size = 28),
+          axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+          legend.background = element_rect(fill = "transparent"),
+          legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+          panel.background = element_rect(fill = "transparent"),
+          panel.grid.minor = element_blank(),
+          plot.background = element_rect(fill = "transparent", color = NA))+
+        geom_text_repel(aes(label = paste0(TW_h,"TW/h")), data = data_ends, fontface ="plain", color = "lightgrey", size = 6, face="bold")+
+        scale_colour_viridis_d() +
+        scale_colour_discrete("Fonti")+
+        guides(fill = guide_legend(title="Fonti"))+
+        xlab("")
+    }, height = 700 )
+    
+    
+  },
+  
+  options = list(height = 850)
+)
+```
+
+
+
+## Come le grandi potenze economiche mondiali si stanno occupando di questo problema? 
+
+Si valutano la variazione degli investimenti nell'energia rinnovabile negli ultimi anni.
+
+```{r,echo = FALSE,cache = FALSE}
+# Dataset già ripulito e riorganizzato
+WEnInv = read_csv("./OurWorldInData/WorldEnergyInvestments4.csv")
+WEnInv <- na.omit(WEnInv)
+
+thematic::thematic_shiny()
+
+shinyApp(
+  ui = fluidPage(
+    theme = bs_theme(bg = "#2b3e50", fg = "#ebebeb", primary = "#33FFBD",secondary ="#FF3375",
+        base_font = font_google("Raleway"),
+        code_font = font_google("Raleway")
+    ),      
+    titlePanel("Grafici interattivi:"),
+    sidebarLayout(position = "right",
+
+      sidebarPanel(
+        checkboxInput("invTot", "Mostra investimenti totali sul non rinnovabile nel mondo", value = FALSE, width = NULL),
+        sliderInput("Anni1", 
+                    "Periodo in anni:",
+                    min = 2015,
+                    max = 2020,
+                    value = c(2015, 2020))
+        ),
+      mainPanel(
+        plotOutput("WEnInvGraf")
+      )
+    )
+  ),
+  server <- function(input, output) {
+    
+    output$WEnInvGraf <- renderPlot({
+      
+      # datasetBarGraf <- WEnInv %>% 
+      #   filter(Year == 2019) %>% 
+      #   filter(Entity == "Mondo Complessivo" |  Entity == "Mondo")
+      
+      if (input$invTot == TRUE) {
+        datasetGraf <- WEnInv %>% 
+          filter(Entity != "Mondo")
+      } else {
+        datasetGraf <- WEnInv %>%  
+          filter(Entity != "Mondo Complessivo" &  Entity != "Mondo")
+        #da cambiare nome Mondo Complessivo
+       
+      }
+       data_ends <- datasetGraf  %>% 
+          filter(Year == input$Anni1[2]) 
+       
+      data_ends$Investment_BillionDollar <- round(data_ends$Investment_BillionDollar)
+      
+      ggplot(datasetGraf, aes(x = Year, y = Investment_BillionDollar, fill = reorder(Entity, desc(Investment_BillionDollar)))) +
+        # geom_bar(data = datasetGraf, stat="identity", aes(fill = Entity), width=0.8, position=position_dodge())+
+        # geom_line(data = datasetGraf, aes(color = Entity), size = 1.3) +
+        geom_area(alpha=0.6 , size=.5, colour="white") +
+        xlim(input$Anni1[1], input$Anni1[2]) +
+        labs(x = "Anni",
+        y = "Investimenti (Miliardi di Dollari(B$))",
+        title  = "Investimenti nel rinnovabile (a confronto)") +
+        theme(axis.title.x = element_text(color="lightgrey", vjust=-1, face="bold"),
+          legend.position = "bottom",
+          axis.title.y = element_text(color="lightgrey" , vjust = 2.2, face="bold"),
+          legend.title = element_text(colour="lightgrey", size=24, face="bold"),
+          legend.key.size = unit(1.5, "cm"),
+          legend.title.align = 0.5,
+          legend.key = element_rect(fill = "transparent", colour = "transparent"),
+          legend.text = element_text(color='lightgrey', size=18),
+          axis.text.x = element_text(color='grey', size=16, angle = 30, hjust = 1),
+          axis.text.y = element_text(color='grey',size=16,angle = 30, vjust = -1),
+          text = element_text(family = "Raleway", size = 24),
+          plot.title = element_text(size = 30, colour="lightgrey",vjust=2),
+          plot.caption = element_text(size = 28),
+          axis.line = element_line(colour = "grey", size = 0.5, linetype = "solid"),
+          legend.box="vertical",
+          legend.background = element_rect(fill = "transparent"),
+          legend.box.background = element_rect(fill = "transparent",colour = "lightgrey"),
+          panel.background = element_rect(fill = "transparent"),
+          panel.grid.minor = element_blank(),
+          plot.background = element_rect(fill = "transparent", color = NA))+
+        geom_text_repel(aes(label = paste0(Investment_BillionDollar," B$")),position = position_stack(vjust = .5), data = data_ends, fontface ="plain", color = "lightgrey", size = 6, fontface="bold")+
+        scale_fill_brewer(palette="Spectral")+
+         scale_colour_discrete("Continenti")+
+         guides(fill = guide_legend(title="Continenti"))+
+        xlab("")
+    }, height = 800 )
+    
+    
+  },
+  
+  options = list(height = 950)
+)
+```
+
+## Fine
+
+Fonti:
+
+* Dataset:  
+ ourworldindata.org,  
+ www.iea.org,  
+ www.bp.com,  
+ www.irena.org;  
+
+* Conversioni:  
+ www.unitjuggler.com,  
+ extraconversion.com,  
+ www.convertunits.com,  
+ www.extension.iastate.edu,  
+ qp.com.qa,  
+ qp.com.qa/en/Pages/ConversionFactor.aspx,  
+ www.kylesconverter.com,  
+ www.bp.com,  
+ www.bp.com/content/dam/bp/business-sites/en/global/corporate/pdfs/energy-economics/statistical-review/bp-stats-review-2019-approximate-conversion-factors.pdf;  
+                
+* Foto:  
+ explorer1.jpl.nasa.gov/galleries/earth-from-space/#gallery-10.  
+
+* R/Shiny/CSS:  
+ Handmade.
+                
+
+
+<!-- tentativo di fare grafici sulla mappa della terra
+
+# CGOResForGeo = CGORes["Reserves"] -->
+<!-- # CGOResForGeo = rowid_to_column(CGOResForGeo, "ID") -->
+
+<!-- # multipoint_matrix = rbind(c(5, 2), c(1, 3), c(3, 4), c(3, 2)) -->
+<!--  # st_multipoint(CGOResForGeo) -->
+<!-- #  -->
+<!-- # names(world) -->
+<!-- # plot(world) -->
+<!-- # summary(world["featurecla"]) -->
+<!-- #  -->
+<!-- # india = world[world$name_long == "India", ] -->
+<!-- # plot(st_geometry(india), expandBB = c(1, 1, 1, 1), col = "gray", lwd = 3) -->
+<!-- # plot(world[0], add = TRUE) -->
+<!-- # st_point(x = c(Entity, Reserves), dim = "XYZ") -->
+<!-- #  -->
+<!-- # world <- ne_countries(scale = "medium", returnclass = "sf") -->
+<!-- # class(world) -->
+<!-- # ggplot(data = wor  ld) + -->
+<!-- #     geom_sf()+ -->
+<!-- #     ggtitle("Mappa del mondo")+ -->
+<!-- #     geom_sf(data = CGORes,aes(geometry = Reserves))  -->
+<!--     # scale_fill_viridis_c(option = "plasma", trans = "sqrt") -->
+
+
+<!-- # tm_shape(world) + -->
+<!-- #   tm_fill() + -->
+<!-- #   tm_borders() + -->
+<!-- #   tm_style("col_blind") -->
+<!--  # ggplot(data = CGORes) + -->
+<!--  #    geom_sf(aes(fill = Reserves)) + -->
+<!--  #    scale_fill_viridis_c(option = "plasma", trans = "sqrt") -->
+<!-- FARE GRAFICO CON CARTELLA RISERVEDICARBURANTIFOSSILI -->
