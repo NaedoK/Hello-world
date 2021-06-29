@@ -1,4 +1,2 @@
-# Hello-world
-My first repository
-
-Hi! I'm naedo, I'm new here and I hope to learn something
+# Compito Fondamenti di Scienza dei Dati e Laboratorio
+Primo Upload, Davide De Cicco
