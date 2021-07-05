@@ -1,0 +1,139 @@
+::-webkit-scrollbar {
+  width: 12px;
+}
+::-webkit-scrollbar-track {
+  background: darkgrey;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 5, 8);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+*, *:before, *:after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  }
+
+body {
+  color: LightGrey;
+  font-family: Raleway;
+  background-size: cover;
+  background-position: top;
+  background-repeat: no-repeat;
+  background-color: black;
+  background-image: url("./Earth_6k1.jpg");
+  margin: auto;
+}
+
+h1 {
+    display: inline-block;
+    color: LightGrey;
+    font-family:'Raleway';
+    font-size: 7em;
+    font-weight: bold;
+    text-shadow: .03em .03em 0 #1e1e26;
+    padding-right: 0px;
+    padding-left: 0px;
+    margin-right: 0px;
+    margin-left: 0px;
+  }
+.small{
+  color: grey;
+}
+div.slide h1{
+  padding-right: 0px;
+  padding-left: 0px;
+  margin-right: 0px;
+  margin-left: 0px;
+}
+p {
+  font-weight: 500;
+  margin: 50px;
+  margin-left: 150px;
+  margin-right: 150px;
+  padding: 10px;
+  text-align: justify;
+  text-justify: inter-word;
+  text-shadow: .03em .03em 0 rgba(0, 14, 20, 0.75);
+}
+p.author {
+  margin: auto;
+  align-self: center;
+  text-align: center;
+}
+a.titleslide{
+  color: LightGrey;
+}
+a:link{
+  color: LightGrey;
+}
+.toolbar a:link{
+  color: LightGrey;
+}
+div {
+  margin: auto;
+  align-self: center;
+  text-align: center;
+}
+div.toolbar{
+    background: rgba(0, 5, 8, 0.8);
+    margin: 20px;
+    padding: 15px;
+    padding-bottom: 20px;
+    border: 0px;
+    height: 3em;
+}
+div.slidy_toc{
+    background: rgba(0, 8, 5, 0.9);
+}
+div.slide {
+  margin: auto;
+  align-self: center;
+  text-align: center;
+  padding: 50px;
+  height:90%;
+  width:100%;
+  padding-right: 0px;
+  padding-left: 0px;
+  margin-right: 0px;
+  margin-left: 0px;
+}
+
+img {
+  position: relative;
+  max-width: 80%;
+  height: auto;
+  margin: 20px;
+  margin-left: 10%;
+  margin-right: 10%;
+  background: rgba(0, 5, 8, 0.60);
+  border: 20px solid rgba(0, 5, 8, 0.01);
+  border-radius: 10px;
+}
+
+/* block quotes */
+blockquote {
+  background: rgba(0, 5, 8, 0.40);
+  border-left: 10px solid rgba(140, 154, 161, 0.60);
+  border-right: 10px solid rgba(140, 154, 161, 0.60);
+  margin: 1.5em 10px;
+  padding: 0.5em 1.5em;
+  font-size: 25px;
+}
+
+slides > slide.backdrop {
+  background: #1e1e26;
+}
+/* scrolling */
+slides > slide {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}
+
+/* hide page numbers */
+slides > slide:not(.nobackground):after {
+  content: '';
+}
